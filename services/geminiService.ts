@@ -13,19 +13,19 @@ export const generatePlanAllocations = async (
   profile: UserProfile,
   totalBudget: number,
   regions: string[],
-  customMedia: CustomMediaConfig[]
+  customMedia: CustomMediaConfig[],
+  selectedTypes: string[]
 ): Promise<MediaAllocation[]> => {
   
   const systemInstruction = `
-    You are an expert Outdoor Media (OOH) Planner. 
-    Your goal is to distribute a budget of ${totalBudget} CNY across different media channels based on the user's profile and goals.
+    You are an expert Outdoor Media (OOH) Planner for the brand "${profile.brandName}".
+    Your goal is to distribute a budget of ${totalBudget} CNY across different media channels based on the user's profile, competitors (${profile.competitors}), and goals.
     
     Rules:
-    1. You MUST include "社区单元门灯箱" (Community Unit Door Lightbox) as a core channel.
-    2. You can also select "广告门" (Advertising Door), "开门App广告" (Open Door App Ad).
-    3. You can select from the provided Custom Media list if they fit the strategy.
-    4. Provide specific reasoning for why each media was chosen based on the user's pain points (${profile.painPoints}) and goals (${profile.goals}).
-    5. The percentages must add up to 100%.
+    1. You MUST prioritize the user's selected media types: ${selectedTypes.join(', ')}.
+    2. You can also select from the provided Custom Media list if they fit the strategy.
+    3. Provide specific reasoning for why each media was chosen based on the user's pain points and goals.
+    4. The percentages must add up to 100%.
   `;
 
   const customMediaPrompt = customMedia.length > 0 
@@ -34,12 +34,15 @@ export const generatePlanAllocations = async (
 
   const prompt = `
     User Profile:
+    - Brand Name: ${profile.brandName}
+    - Competitors: ${profile.competitors}
     - Pain Points: ${profile.painPoints}
     - Goals: ${profile.goals}
     - Target Scenarios: ${profile.scenarios}
     - Products: ${profile.products}
     - Measurement: ${profile.measurement}
     
+    User Preferred Media Types: ${selectedTypes.join(', ')}
     Target Regions: ${regions.join(', ')}
     ${customMediaPrompt}
     
@@ -51,7 +54,7 @@ export const generatePlanAllocations = async (
     items: {
       type: Type.OBJECT,
       properties: {
-        type: { type: Type.STRING, description: "One of: 社区单元门灯箱, 广告门, 开门App广告, or Custom Name" },
+        type: { type: Type.STRING, description: `One of: ${selectedTypes.join(', ')} or Custom Name` },
         name: { type: Type.STRING, description: "Display name of the media" },
         percentage: { type: Type.NUMBER, description: "Allocation percentage (0-100)" },
         budget: { type: Type.NUMBER, description: "Calculated budget for this item" },
@@ -81,12 +84,16 @@ export const generatePlanAllocations = async (
     throw new Error("Empty response from AI");
   } catch (error) {
     console.error("Plan generation failed", error);
-    // Fallback if AI fails
-    return [
-      { type: '社区单元门灯箱', name: '社区单元门灯箱', percentage: 50, budget: totalBudget * 0.5, reasoning: "Core mandatory framework", location: "Community Entrances" },
-      { type: '广告门', name: '广告门', percentage: 30, budget: totalBudget * 0.3, reasoning: "High visibility", location: "Main Gates" },
-      { type: '开门App广告', name: '开门App广告', percentage: 20, budget: totalBudget * 0.2, reasoning: "Digital frequency", location: "App Splash Screen" }
-    ];
+    // Fallback if AI fails (use first 3 selected types or defaults)
+    const defaults = selectedTypes.length >= 1 ? selectedTypes : ['社区单元门灯箱', '广告门'];
+    return defaults.slice(0, 3).map((type, index) => ({
+        type: type,
+        name: type,
+        percentage: 33,
+        budget: totalBudget * 0.33,
+        reasoning: "Fallback strategy based on user selection",
+        location: "High traffic areas"
+    }));
   }
 };
 
@@ -97,6 +104,8 @@ export const performAnalysis = async (
 ): Promise<AnalysisData> => {
 
   const context = `
+    Brand: ${profile.brandName}
+    Competitors: ${profile.competitors}
     Profile: ${JSON.stringify(profile)}
     Plan Allocations: ${JSON.stringify(allocations)}
     Regions: ${regions.join(', ')}
@@ -107,9 +116,9 @@ export const performAnalysis = async (
 
   // 1. Competitor & Market Insight (Using Search Grounding)
   const marketPrompt = `
-    Analyze the competitive landscape for a brand selling "${profile.products}" in China.
-    Identify competitor marketing strategies in outdoor media.
-    Analyze current consumer trends and portraits for this category (Age, Profession, Media Habits).
+    Analyze the competitive landscape for "${profile.brandName}" vs competitors like "${profile.competitors}" in China.
+    Focus on their outdoor media marketing strategies (OOH).
+    Analyze current consumer trends and portraits for "${profile.products}".
     Provide a concise report.
   `;
 
@@ -145,8 +154,8 @@ export const performAnalysis = async (
     Market Insight: ${competitorInsight}
 
     Please generate 3 separate analysis sections in JSON format:
-    1. ROI: Evaluate budget rationality, expected exposure, and ROI.
-    2. SWOT: Strengths, Weaknesses, Opportunities, Threats of this specific media mix.
+    1. ROI: Evaluate budget rationality, expected exposure, and ROI for brand ${profile.brandName}.
+    2. SWOT: Strengths, Weaknesses, Opportunities, Threats of this specific media mix against competitors ${profile.competitors}.
     3. 4P: Product, Price, Place, Promotion strategy suggestions based on the plan.
   `;
 

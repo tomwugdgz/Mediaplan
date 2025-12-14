@@ -8,6 +8,20 @@ interface Props {
 
 const questions = [
   {
+    key: 'brandInfo', 
+    // We will split this answer into brandName and competitors logically, 
+    // or just store it and let the main app parse it, 
+    // but for the UI flow let's ask for them together or sequentially.
+    // To match the user request exactly "First question should be...", let's combine.
+    question: '首先，请告诉我们要服务的【品牌名称】以及主要的【竞争对手】是谁？',
+    placeholder: '例如：品牌是“某某咖啡”，竞品包括“瑞幸、星巴克”等'
+  },
+  {
+    key: 'products',
+    question: '您计划选择哪款或哪几款产品作为此次营销的突破口？',
+    placeholder: '请输入具体产品名称或系列'
+  },
+  {
     key: 'painPoints',
     question: '您目前在营销工作中遇到的主要痛点是什么？',
     placeholder: '例如：品牌知名度不高、产品销售额停滞不前、目标用户触达不精准等'
@@ -20,12 +34,7 @@ const questions = [
   {
     key: 'scenarios',
     question: '您希望在哪些场景或地点解决这些痛点？',
-    placeholder: '例如：特定的地理区域、目标用户经常出入的场所等，您目前考虑的渠道是线上还是其他方法？'
-  },
-  {
-    key: 'products',
-    question: '您计划选择哪款或哪几款产品作为此次营销的突破口？',
-    placeholder: '请输入具体产品名称或系列'
+    placeholder: '例如：特定的地理区域、目标用户经常出入的场所等'
   },
   {
     key: 'measurement',
@@ -46,8 +55,22 @@ export const Questionnaire: React.FC<Props> = ({ onComplete }) => {
     if (step < questions.length - 1) {
       setStep(step + 1);
     } else {
-      // Complete
-      onComplete(answers as unknown as UserProfile);
+      // Complete - Map answers to UserProfile
+      // We assume the first answer contains both brand and competitors for simplicity in this generic UI,
+      // or we parse it. For now, we'll store the raw text and let the service handle the extraction/context.
+      // Ideally, we'd split the UI, but fitting the existing generic component:
+      
+      const profile: UserProfile = {
+        brandName: answers['brandInfo'] || '未指定品牌',
+        competitors: answers['brandInfo'] || '未指定竞品', // The AI will handle the text analysis
+        products: answers['products'],
+        painPoints: answers['painPoints'],
+        goals: answers['goals'],
+        scenarios: answers['scenarios'],
+        measurement: answers['measurement']
+      };
+      
+      onComplete(profile);
     }
   };
 

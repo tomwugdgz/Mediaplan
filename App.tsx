@@ -20,20 +20,26 @@ const App = () => {
     setView('config');
   };
 
-  const handleGeneratePlan = async (budget: number, regions: string[], duration: string, customMedia: CustomMediaConfig[]) => {
+  const handleGeneratePlan = async (
+    budget: number, 
+    regions: string[], 
+    duration: string, 
+    customMedia: CustomMediaConfig[], 
+    selectedTypes: string[]
+  ) => {
     if (!profile) return;
     setIsProcessing(true);
     
     try {
-      // 1. Generate Allocations (Flash Model)
-      const allocations = await generatePlanAllocations(profile, budget, regions, customMedia);
+      // 1. Generate Allocations (Flash Model) with Selected Types
+      const allocations = await generatePlanAllocations(profile, budget, regions, customMedia, selectedTypes);
 
       // 2. Perform Analysis (Parallel with Search & Reasoning)
       const analysis = await performAnalysis(profile, allocations, regions);
 
       const newPlan: AdPlan = {
         id: Date.now().toString(),
-        name: `${profile.products} 推广方案`,
+        name: `${profile.brandName || profile.products} 推广方案`,
         createdAt: Date.now(),
         userProfile: profile,
         totalBudget: budget,

@@ -6,6 +6,8 @@ export enum MediaType {
 }
 
 export interface UserProfile {
+  brandName: string;
+  competitors: string;
   painPoints: string;
   goals: string;
   scenarios: string;

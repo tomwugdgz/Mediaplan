@@ -1,16 +1,32 @@
 import React, { useState } from 'react';
 import { CustomMediaConfig } from '../types';
-import { Plus, Trash2, Loader2, DollarSign, Calendar, MapPin } from 'lucide-react';
+import { Plus, Trash2, Loader2, DollarSign, Calendar, MapPin, Layers } from 'lucide-react';
 
 interface Props {
   isGenerating: boolean;
-  onGenerate: (budget: number, regions: string[], duration: string, customMedia: CustomMediaConfig[]) => void;
+  onGenerate: (budget: number, regions: string[], duration: string, customMedia: CustomMediaConfig[], selectedTypes: string[]) => void;
 }
+
+const STANDARD_MEDIA_OPTIONS = [
+  '社区单元门灯箱',
+  '社区门禁广告门',
+  '开门App开屏/弹窗',
+  '社区道闸广告',
+  '写字楼电梯海报',
+  '写字楼梯内视频',
+  '公交候车亭灯箱',
+  '商圈户外LED大屏',
+  '地铁灯箱/包车'
+];
 
 export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => {
   const [budget, setBudget] = useState<number>(50000);
   const [regions, setRegions] = useState<string>('北京, 上海');
   const [duration, setDuration] = useState<string>('1个月');
+  
+  // New: Standard Media Selection
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(['社区单元门灯箱', '社区门禁广告门', '开门App开屏/弹窗']);
+  
   const [customMedia, setCustomMedia] = useState<CustomMediaConfig[]>([]);
   const [showCustomForm, setShowCustomForm] = useState(false);
 
@@ -18,6 +34,14 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
   const [newMedia, setNewMedia] = useState<CustomMediaConfig>({
     name: '', format: '', effects: '', imageUrl: '', cityCoverage: '', rateCardPrice: 0, discount: 1
   });
+
+  const toggleMediaType = (type: string) => {
+    if (selectedTypes.includes(type)) {
+      setSelectedTypes(selectedTypes.filter(t => t !== type));
+    } else {
+      setSelectedTypes([...selectedTypes, type]);
+    }
+  };
 
   const addCustomMedia = () => {
     if (newMedia.name) {
@@ -28,11 +52,13 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
   };
 
   const handleSubmit = () => {
-    onGenerate(budget, regions.split(/,|，/).map(s => s.trim()), duration, customMedia);
+    onGenerate(budget, regions.split(/,|，/).map(s => s.trim()), duration, customMedia, selectedTypes);
   };
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6">
+      
+      {/* 1. Basic Config */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
            <span className="w-1 h-6 bg-brand-600 rounded-full"></span>
@@ -77,6 +103,36 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
         </div>
       </div>
 
+      {/* 2. Standard Media Selection */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+           <span className="w-1 h-6 bg-brand-600 rounded-full"></span>
+           媒体形式偏好 (多选)
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {STANDARD_MEDIA_OPTIONS.map(type => (
+            <label key={type} className={`
+              flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all
+              ${selectedTypes.includes(type) 
+                ? 'border-brand-500 bg-brand-50 text-brand-900 shadow-sm' 
+                : 'border-gray-200 hover:border-brand-300 hover:bg-gray-50 text-gray-700'}
+            `}>
+              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selectedTypes.includes(type) ? 'bg-brand-500 border-brand-500' : 'border-gray-300 bg-white'}`}>
+                {selectedTypes.includes(type) && <Layers size={12} className="text-white" />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden" 
+                checked={selectedTypes.includes(type)} 
+                onChange={() => toggleMediaType(type)} 
+              />
+              <span className="font-medium">{type}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Custom Media */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -119,7 +175,7 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
             </div>
           ))}
           {customMedia.length === 0 && !showCustomForm && (
-            <p className="text-gray-400 text-center py-4 text-sm">暂无自定义媒体，系统将主要使用标准户外媒体库。</p>
+            <p className="text-gray-400 text-center py-4 text-sm">暂无自定义媒体</p>
           )}
         </div>
       </div>
