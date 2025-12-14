@@ -1,0 +1,137 @@
+import React, { useState } from 'react';
+import { CustomMediaConfig } from '../types';
+import { Plus, Trash2, Loader2, DollarSign, Calendar, MapPin } from 'lucide-react';
+
+interface Props {
+  isGenerating: boolean;
+  onGenerate: (budget: number, regions: string[], duration: string, customMedia: CustomMediaConfig[]) => void;
+}
+
+export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => {
+  const [budget, setBudget] = useState<number>(50000);
+  const [regions, setRegions] = useState<string>('北京, 上海');
+  const [duration, setDuration] = useState<string>('1个月');
+  const [customMedia, setCustomMedia] = useState<CustomMediaConfig[]>([]);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+
+  // Temp state for new custom media
+  const [newMedia, setNewMedia] = useState<CustomMediaConfig>({
+    name: '', format: '', effects: '', imageUrl: '', cityCoverage: '', rateCardPrice: 0, discount: 1
+  });
+
+  const addCustomMedia = () => {
+    if (newMedia.name) {
+      setCustomMedia([...customMedia, newMedia]);
+      setNewMedia({ name: '', format: '', effects: '', imageUrl: '', cityCoverage: '', rateCardPrice: 0, discount: 1 });
+      setShowCustomForm(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    onGenerate(budget, regions.split(/,|，/).map(s => s.trim()), duration, customMedia);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 space-y-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+           <span className="w-1 h-6 bg-brand-600 rounded-full"></span>
+           基础投放配置
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <DollarSign size={16}/> 总预算 (元)
+            </label>
+            <input
+              type="number"
+              value={budget}
+              onChange={(e) => setBudget(Number(e.target.value))}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <MapPin size={16}/> 投放区域 (逗号分隔)
+            </label>
+            <input
+              type="text"
+              value={regions}
+              onChange={(e) => setRegions(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <Calendar size={16}/> 投放周期
+            </label>
+            <input
+              type="text"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="例如: 3个月"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <span className="w-1 h-6 bg-purple-600 rounded-full"></span>
+            自定义媒体资源 (可选)
+          </h2>
+          <button 
+            onClick={() => setShowCustomForm(!showCustomForm)}
+            className="text-brand-600 font-medium hover:bg-brand-50 px-3 py-1 rounded-lg transition-colors flex items-center gap-1"
+          >
+            <Plus size={18} /> 添加媒体
+          </button>
+        </div>
+
+        {showCustomForm && (
+          <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input placeholder="媒体名称" className="p-2 rounded border" value={newMedia.name} onChange={e => setNewMedia({...newMedia, name: e.target.value})} />
+            <input placeholder="媒体形式" className="p-2 rounded border" value={newMedia.format} onChange={e => setNewMedia({...newMedia, format: e.target.value})} />
+            <input placeholder="特效/效果" className="p-2 rounded border" value={newMedia.effects} onChange={e => setNewMedia({...newMedia, effects: e.target.value})} />
+            <input placeholder="图片链接 URL" className="p-2 rounded border" value={newMedia.imageUrl} onChange={e => setNewMedia({...newMedia, imageUrl: e.target.value})} />
+            <input placeholder="覆盖城市" className="p-2 rounded border" value={newMedia.cityCoverage} onChange={e => setNewMedia({...newMedia, cityCoverage: e.target.value})} />
+            <div className="flex gap-2">
+               <input type="number" placeholder="刊例价" className="p-2 rounded border w-1/2" value={newMedia.rateCardPrice || ''} onChange={e => setNewMedia({...newMedia, rateCardPrice: Number(e.target.value)})} />
+               <input type="number" placeholder="折扣 (0-1)" className="p-2 rounded border w-1/2" value={newMedia.discount} step="0.1" onChange={e => setNewMedia({...newMedia, discount: Number(e.target.value)})} />
+            </div>
+            <button onClick={addCustomMedia} className="md:col-span-2 bg-brand-600 text-white py-2 rounded-lg hover:bg-brand-700">确认添加</button>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {customMedia.map((media, idx) => (
+            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <div className="font-semibold text-gray-800">{media.name}</div>
+                <div className="text-xs text-gray-500">{media.format} · {media.cityCoverage}</div>
+              </div>
+              <button onClick={() => setCustomMedia(customMedia.filter((_, i) => i !== idx))} className="text-red-500 hover:bg-red-50 p-2 rounded-full">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          {customMedia.length === 0 && !showCustomForm && (
+            <p className="text-gray-400 text-center py-4 text-sm">暂无自定义媒体，系统将主要使用标准户外媒体库。</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={isGenerating}
+        className="w-full bg-gradient-to-r from-brand-600 to-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+      >
+        {isGenerating ? <Loader2 className="animate-spin" /> : null}
+        {isGenerating ? 'AI正在生成策略...' : '生成智能投放方案'}
+      </button>
+    </div>
+  );
+};
