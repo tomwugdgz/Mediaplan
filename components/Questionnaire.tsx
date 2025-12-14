@@ -8,13 +8,9 @@ interface Props {
 
 const questions = [
   {
-    key: 'brandInfo', 
-    // We will split this answer into brandName and competitors logically, 
-    // or just store it and let the main app parse it, 
-    // but for the UI flow let's ask for them together or sequentially.
-    // To match the user request exactly "First question should be...", let's combine.
-    question: '首先，请告诉我们要服务的【品牌名称】以及主要的【竞争对手】是谁？',
-    placeholder: '例如：品牌是“某某咖啡”，竞品包括“瑞幸、星巴克”等'
+    key: 'brand_identity', // Special key for custom render
+    question: '首先，请建立您的品牌档案',
+    placeholder: '' // Not used for this step
   },
   {
     key: 'products',
@@ -47,22 +43,17 @@ export const Questionnaire: React.FC<Props> = ({ onComplete }) => {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
-  const handleAnswer = (val: string) => {
-    setAnswers(prev => ({ ...prev, [questions[step].key]: val }));
+  const handleAnswer = (key: string, val: string) => {
+    setAnswers(prev => ({ ...prev, [key]: val }));
   };
 
   const handleNext = () => {
     if (step < questions.length - 1) {
       setStep(step + 1);
     } else {
-      // Complete - Map answers to UserProfile
-      // We assume the first answer contains both brand and competitors for simplicity in this generic UI,
-      // or we parse it. For now, we'll store the raw text and let the service handle the extraction/context.
-      // Ideally, we'd split the UI, but fitting the existing generic component:
-      
       const profile: UserProfile = {
-        brandName: answers['brandInfo'] || '未指定品牌',
-        competitors: answers['brandInfo'] || '未指定竞品', // The AI will handle the text analysis
+        brandName: answers['brandName'] || '未指定品牌',
+        competitors: answers['competitors'] || '未指定竞品',
         products: answers['products'],
         painPoints: answers['painPoints'],
         goals: answers['goals'],
@@ -75,6 +66,14 @@ export const Questionnaire: React.FC<Props> = ({ onComplete }) => {
   };
 
   const currentQ = questions[step];
+  
+  // Validation for next button
+  const isStepValid = () => {
+    if (currentQ.key === 'brand_identity') {
+      return !!answers['brandName'] && !!answers['competitors'];
+    }
+    return !!answers[currentQ.key];
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
@@ -94,19 +93,46 @@ export const Questionnaire: React.FC<Props> = ({ onComplete }) => {
       <div className="bg-white shadow-xl rounded-2xl p-8 border border-gray-100 min-h-[400px] flex flex-col">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">{currentQ.question}</h2>
         
-        <textarea
-          className="w-full flex-grow p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none text-lg"
-          placeholder={currentQ.placeholder}
-          value={answers[currentQ.key] || ''}
-          onChange={(e) => handleAnswer(e.target.value)}
-        />
+        <div className="flex-grow">
+          {currentQ.key === 'brand_identity' ? (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">品牌名称</label>
+                <input
+                  type="text"
+                  className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-lg"
+                  placeholder="例如：瑞幸咖啡"
+                  value={answers['brandName'] || ''}
+                  onChange={(e) => handleAnswer('brandName', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">主要竞争对手</label>
+                <textarea
+                  className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none text-lg h-32"
+                  placeholder="例如：星巴克、Manner、库迪咖啡"
+                  value={answers['competitors'] || ''}
+                  onChange={(e) => handleAnswer('competitors', e.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <textarea
+              className="w-full h-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none text-lg"
+              placeholder={currentQ.placeholder}
+              value={answers[currentQ.key] || ''}
+              onChange={(e) => handleAnswer(currentQ.key, e.target.value)}
+              style={{ minHeight: '200px' }}
+            />
+          )}
+        </div>
 
         <div className="mt-8 flex justify-end">
           <button
             onClick={handleNext}
-            disabled={!answers[currentQ.key]}
+            disabled={!isStepValid()}
             className={`flex items-center gap-2 px-8 py-3 rounded-xl text-white font-semibold transition-all ${
-              !answers[currentQ.key] 
+              !isStepValid()
                 ? 'bg-gray-300 cursor-not-allowed' 
                 : 'bg-brand-600 hover:bg-brand-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
             }`}
