@@ -44,15 +44,33 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
   };
 
   const addCustomMedia = () => {
-    if (newMedia.name) {
-      setCustomMedia([...customMedia, newMedia]);
-      setNewMedia({ name: '', format: '', effects: '', imageUrl: '', cityCoverage: '', rateCardPrice: 0, discount: 1 });
-      setShowCustomForm(false);
+    // Validation
+    if (!newMedia.name.trim()) {
+      alert("请输入媒体名称");
+      return;
     }
+    if (newMedia.rateCardPrice < 0) {
+      alert("请输入有效的刊例价 (>=0)");
+      return;
+    }
+    if (newMedia.discount < 0 || newMedia.discount > 1) {
+      alert("请输入有效的折扣 (0-1之间)");
+      return;
+    }
+
+    setCustomMedia([...customMedia, newMedia]);
+    setNewMedia({ name: '', format: '', effects: '', imageUrl: '', cityCoverage: '', rateCardPrice: 0, discount: 1 });
+    setShowCustomForm(false);
   };
 
   const handleSubmit = () => {
     onGenerate(budget, regions.split(/,|，/).map(s => s.trim()), duration, customMedia, selectedTypes);
+  };
+
+  const formatBudget = (val: number) => {
+    if (val >= 100000000) return (val / 100000000).toFixed(1) + '亿';
+    if (val >= 10000) return (val / 10000).toFixed(0) + '万';
+    return val;
   };
 
   return (
@@ -67,15 +85,25 @@ export const PlanGenerator: React.FC<Props> = ({ isGenerating, onGenerate }) => 
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <DollarSign size={16}/> 总预算 (元)
+            <label className="block text-sm font-medium text-gray-700 mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <DollarSign size={16}/> 总预算
+              </div>
+              <span className="text-brand-600 font-bold text-lg">¥{budget.toLocaleString()}</span>
             </label>
             <input
-              type="number"
+              type="range"
+              min="10000"
+              max="50000000"
+              step="10000"
               value={budget}
               onChange={(e) => setBudget(Number(e.target.value))}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-600"
             />
+            <div className="flex justify-between text-xs text-gray-400 mt-2">
+              <span>¥1万</span>
+              <span>¥5000万</span>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">

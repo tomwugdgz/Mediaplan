@@ -1,22 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, AdPlan, CustomMediaConfig } from './types';
 import { generatePlanAllocations, performAnalysis } from './services/geminiService';
 import { Questionnaire } from './components/Questionnaire';
 import { PlanGenerator } from './components/PlanGenerator';
 import { PlanDashboard } from './components/PlanDashboard';
 import { ChatBot } from './components/ChatBot';
+import { PlanHistory } from './components/PlanHistory';
+import { PlanComparison } from './components/PlanComparison';
 import { Layout } from './components/Layout';
-import { createRoot } from 'react-dom/client';
+import { History, LayoutDashboard } from 'lucide-react';
 
 const App = () => {
-  const [view, setView] = useState<'onboarding' | 'config' | 'dashboard'>('onboarding');
+  const [view, setView] = useState<'onboarding' | 'config' | 'dashboard' | 'history' | 'compare'>('onboarding');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [plan, setPlan] = useState<AdPlan | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  
+  // Storage & History State
+  const [savedPlans, setSavedPlans] = useState<AdPlan[]>([]);
+  const [comparePlans, setComparePlans] = useState<AdPlan[]>([]);
+
+  // Load from LocalStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('ooh_saved_plans');
+    if (stored) {
+      try {
+        setSavedPlans(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed to parse saved plans", e);
+      }
+    }
+  }, []);
 
   const handleProfileComplete = (data: UserProfile) => {
     setProfile(data);
+    setView('config');
+  };
+
+  const handleSavePlan = (planToSave: AdPlan) => {
+    const exists = savedPlans.some(p => p.id === planToSave.id);
+    let newSaved;
+    if (exists) {
+      newSaved = savedPlans.map(p => p.id === planToSave.id ? planToSave : p);
+    } else {
+      newSaved = [planToSave, ...savedPlans];
+    }
+    setSavedPlans(newSaved);
+    localStorage.setItem('ooh_saved_plans', JSON.stringify(newSaved));
+  };
+
+  const handleDeletePlan = (id: string) => {
+    const newSaved = savedPlans.filter(p => p.id !== id);
+    setSavedPlans(newSaved);
+    localStorage.setItem('ooh_saved_plans', JSON.stringify(newSaved));
+    if (plan?.id === id) {
+        setPlan(null);
+        setView('history');
+    }
+  };
+
+  const handleViewPlan = (p: AdPlan) => {
+    setPlan(p);
+    setProfile(p.userProfile);
+    setView('dashboard');
+  };
+
+  const handleCompareStart = (plans: AdPlan[]) => {
+    setComparePlans(plans);
+    setView('compare');
+  };
+
+  const handleResetPlan = () => {
+    setPlan(null);
     setView('config');
   };
 
@@ -64,14 +120,33 @@ const App = () => {
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('onboarding')}>
               <div className="bg-brand-600 text-white p-1.5 rounded-lg font-bold">OOH</div>
               <span className="font-bold text-xl tracking-tight text-gray-900">小助手</span>
             </div>
             {view !== 'onboarding' && (
-              <div className="flex items-center">
-                 <button onClick={() => setView('config')} className="text-gray-500 hover:text-brand-600 text-sm font-medium mr-4">新方案</button>
-                 <div className="h-8 w-8 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 font-bold border border-brand-200">U</div>
+              <div className="flex items-center gap-4">
+                 <button 
+                    onClick={() => setView('history')} 
+                    className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'history' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
+                 >
+                    <History size={18} /> 历史方案
+                 </button>
+                 
+                 {plan && (
+                   <button 
+                      onClick={() => setView('dashboard')} 
+                      className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'dashboard' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
+                   >
+                      <LayoutDashboard size={18} /> 当前方案
+                   </button>
+                 )}
+
+                 <div className="h-6 w-[1px] bg-gray-300 mx-2"></div>
+
+                 <button onClick={() => setView('config')} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-brand-700 transition-colors">
+                    + 新方案
+                 </button>
               </div>
             )}
           </div>
@@ -100,7 +175,29 @@ const App = () => {
         )}
 
         {view === 'dashboard' && plan && (
-          <PlanDashboard plan={plan} onOpenChat={() => setIsChatOpen(true)} />
+          <PlanDashboard 
+            plan={plan} 
+            onOpenChat={() => setIsChatOpen(true)} 
+            onSavePlan={handleSavePlan}
+            onReset={handleResetPlan}
+          />
+        )}
+
+        {view === 'history' && (
+            <PlanHistory 
+                plans={savedPlans} 
+                onView={handleViewPlan} 
+                onDelete={handleDeletePlan}
+                onCompare={handleCompareStart}
+            />
+        )}
+
+        {view === 'compare' && comparePlans.length === 2 && (
+            <PlanComparison 
+                planA={comparePlans[0]} 
+                planB={comparePlans[1]} 
+                onBack={() => setView('history')}
+            />
         )}
       </main>
 
