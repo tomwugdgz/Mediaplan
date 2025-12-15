@@ -76,6 +76,10 @@ const App = () => {
     setView('config');
   };
 
+  const handleUpdatePlan = (updatedPlan: AdPlan) => {
+    setPlan(updatedPlan);
+  };
+
   const handleGeneratePlan = async (
     budget: number, 
     regions: string[], 
@@ -116,8 +120,8 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 print:bg-white">
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('onboarding')}>
@@ -153,9 +157,9 @@ const App = () => {
         </div>
       </nav>
 
-      <main className="py-10">
+      <main className="py-10 print:py-0">
         {view === 'onboarding' && (
-          <div className="animate-fade-in-up">
+          <div className="animate-fade-in-up print:hidden">
              <div className="text-center mb-10">
                <h1 className="text-3xl font-bold text-gray-900 mb-4">定制您的专属户外营销方案</h1>
                <p className="text-gray-500 max-w-2xl mx-auto">回答5个核心问题，AI 将为您生成包含媒体组合、预算分配、竞品分析及 ROI 预测的完整策划书。</p>
@@ -165,7 +169,7 @@ const App = () => {
         )}
 
         {view === 'config' && (
-           <div className="animate-fade-in-up">
+           <div className="animate-fade-in-up print:hidden">
               <div className="text-center mb-10">
                 <h1 className="text-2xl font-bold text-gray-900">配置投放参数</h1>
                 <p className="text-gray-500">根据已建立的客户档案，配置预算与媒体资源</p>
@@ -180,6 +184,7 @@ const App = () => {
             onOpenChat={() => setIsChatOpen(true)} 
             onSavePlan={handleSavePlan}
             onReset={handleResetPlan}
+            onUpdatePlan={handleUpdatePlan}
           />
         )}
 

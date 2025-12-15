@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { AdPlan } from '../types';
+import { AdPlan, MediaAllocation } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Sector } from 'recharts';
-import { TrendingUp, ShieldAlert, Target, Search, MessageSquare, FileText, Image as ImageIcon, Save, RefreshCw } from 'lucide-react';
+import { TrendingUp, ShieldAlert, Target, Search, MessageSquare, FileText, Image as ImageIcon, Save, RefreshCw, Printer, FileJson } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   onOpenChat: () => void;
   onSavePlan: (plan: AdPlan) => void;
   onReset: () => void;
+  onUpdatePlan: (plan: AdPlan) => void;
 }
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#f43f5e', '#10b981', '#f59e0b', '#6366f1', '#ec4899'];
@@ -49,7 +50,7 @@ const renderActiveShape = (props: any) => {
   );
 };
 
-export const PlanDashboard: React.FC<Props> = ({ plan, onOpenChat, onSavePlan, onReset }) => {
+export const PlanDashboard: React.FC<Props> = ({ plan, onOpenChat, onSavePlan, onReset, onUpdatePlan }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'roi' | 'swot' | '4p' | 'insight'>('overview');
   const [activeIndex, setActiveIndex] = useState(0);
   const [isSorted, setIsSorted] = useState(false);
@@ -73,25 +74,28 @@ export const PlanDashboard: React.FC<Props> = ({ plan, onOpenChat, onSavePlan, o
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const TabButton = ({ id, label, icon: Icon }: any) => (
-    <button
-      onClick={() => setActiveTab(id)}
-      className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors border-b-2 ${
-        activeTab === id 
-          ? 'border-brand-600 text-brand-600 bg-brand-50' 
-          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-      }`}
-    >
-      <Icon size={18} />
-      {label}
-    </button>
-  );
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportJSON = () => {
+    const jsonString = JSON.stringify(plan, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${plan.name}_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleExportMarkdown = () => {
     const { name, totalBudget, duration, regions, allocations, analysis } = plan;
     
+    // Create table with specifications column
     const allocationsTable = allocations.map(item => 
-      `| ${item.name} | ${item.type} | ${item.percentage}% | ¥${item.budget.toLocaleString()} | ${item.reasoning.replace(/\n/g, ' ')} |`
+      `| ${item.name} | ${item.type} | ${item.specifications || '标准规格'} | ${item.percentage}% | ¥${item.budget.toLocaleString()} | ${item.reasoning.replace(/\n/g, ' ')} |`
     ).join('\n');
 
     const markdownContent = `
@@ -106,13 +110,13 @@ export const PlanDashboard: React.FC<Props> = ({ plan, onOpenChat, onSavePlan, o
 
 ## 1. 媒体投放组合策略
 
-| 媒体名称 | 类型 | 占比 | 预算 | 推荐理由 |
-|---|---|---|---|---|
+| 媒体名称 | 类型 | 规格/点位 | 占比 | 预算 | 推荐理由 |
+|---|---|---|---|---|---|
 ${allocationsTable}
 
 ---
 
-## 2. 市场与竞品洞察
+## 2. 竞品分析 (Competitor Analysis)
 ${analysis.competitorInsight}
 
 ---
@@ -144,6 +148,97 @@ ${analysis.marketing4p}
     document.body.removeChild(link);
   };
 
+  const handleAllocationChange = (index: number, field: keyof MediaAllocation, value: any) => {
+    const newAllocations = [...plan.allocations];
+    
+    if (field === 'percentage') {
+        let newPercentage = Math.min(100, Math.max(0, Number(value)));
+        
+        // Calculate sum of budgets of ALL OTHER items
+        const otherBudget = plan.allocations.reduce((sum, item, i) => i === index ? sum : sum + item.budget, 0);
+        let newBudget = newAllocations[index].budget;
+
+        if (otherBudget === 0) {
+            // If there are no other items to balance against, we fallback to simple scaling of the current total.
+            // Note: If this is the only item, percentage is forced to 100% mathematically.
+            newBudget = Math.round(plan.totalBudget * (newPercentage / 100));
+        } else {
+            // Smart Formula: Calculate what budget is needed so that it equals P% of the NEW total.
+            // Budget / (Budget + Other) = P / 100
+            // Budget = Other * (P / (100 - P))
+            
+            // Cap percentage to avoid division by zero
+            if (newPercentage >= 99.9) newPercentage = 99.9;
+            
+            newBudget = Math.round(otherBudget * (newPercentage / (100 - newPercentage)));
+        }
+        
+        newAllocations[index] = {
+            ...newAllocations[index],
+            budget: newBudget
+        };
+        
+        // Recalculate Total Budget to be the sum of all components
+        const newTotalBudget = newAllocations.reduce((sum, item) => sum + item.budget, 0);
+
+        // Normalize all percentages based on the new total to keep data consistent
+        if (newTotalBudget > 0) {
+            newAllocations.forEach((item, i) => {
+                newAllocations[i].percentage = Number(((item.budget / newTotalBudget) * 100).toFixed(1));
+            });
+        }
+        
+        onUpdatePlan({
+            ...plan,
+            totalBudget: newTotalBudget,
+            allocations: newAllocations
+        });
+
+    } else if (field === 'budget') {
+        const newBudget = Math.max(0, Number(value));
+        newAllocations[index] = {
+            ...newAllocations[index],
+            budget: newBudget
+        };
+        
+        // Recalculate Total Budget
+        const newTotalBudget = newAllocations.reduce((sum, item) => sum + item.budget, 0);
+        
+        // Recalculate all percentages
+        if (newTotalBudget > 0) {
+            newAllocations.forEach((item, i) => {
+                newAllocations[i].percentage = Number(((item.budget / newTotalBudget) * 100).toFixed(1));
+            });
+        }
+
+        onUpdatePlan({
+            ...plan,
+            totalBudget: newTotalBudget,
+            allocations: newAllocations
+        });
+    } else {
+        newAllocations[index] = {
+            ...newAllocations[index],
+            [field]: value
+        };
+        onUpdatePlan({ ...plan, allocations: newAllocations });
+    }
+  };
+
+  const TabButton = ({ id, label, icon: Icon }: any) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors border-b-2 ${
+        activeTab === id 
+          ? 'border-brand-600 text-brand-600 bg-brand-50' 
+          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      <Icon size={18} />
+      {label}
+    </button>
+  );
+
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6">
       {/* Header */}
@@ -152,27 +247,48 @@ ${analysis.marketing4p}
           <h1 className="text-2xl font-bold text-gray-900">{plan.name}</h1>
           <p className="text-gray-500 mt-1">总预算: ¥{plan.totalBudget.toLocaleString()} | 周期: {plan.duration} | 区域: {plan.regions.join(', ')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           <button 
             onClick={onReset}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 shadow-sm transition-all"
-            title="重新配置方案"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-sm transition-all"
+            title="清空当前方案并返回配置"
           >
-            <RefreshCw size={16} /> 重置
+            <RefreshCw size={16} /> 重置方案
           </button>
+          
+           <div className="h-8 w-[1px] bg-gray-300 mx-1"></div>
+
+           <button 
+            onClick={handleExportJSON}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+            title="导出 JSON"
+          >
+            <FileJson size={16} /> JSON
+          </button>
+           <button 
+            onClick={handleExportMarkdown}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+            title="导出 Markdown"
+          >
+            <FileText size={16} /> MD
+          </button>
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md transition-all"
+            title="打印或保存为 PDF"
+          >
+            <Printer size={16} /> 打印/PDF
+          </button>
+          
+          <div className="h-8 w-[1px] bg-gray-300 mx-1"></div>
+
           <button 
             onClick={handleSave}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white shadow-md transition-all ${
-              isSaved ? 'bg-green-600' : 'bg-indigo-600 hover:bg-indigo-700'
+              isSaved ? 'bg-green-600' : 'bg-brand-600 hover:bg-brand-700'
             }`}
           >
             <Save size={16} /> {isSaved ? '已保存!' : '保存方案'}
-          </button>
-          <button 
-            onClick={handleExportMarkdown}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 shadow-md transition-all hover:-translate-y-0.5"
-          >
-            <FileText size={16} /> 导出 Markdown
           </button>
         </div>
       </div>
@@ -183,12 +299,12 @@ ${analysis.marketing4p}
         {/* Left Column: Visuals & Allocations */}
         <div className="lg:col-span-1 space-y-6">
            {/* Budget Distribution */}
-           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 print:break-inside-avoid">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-gray-800">预算分配占比</h3>
                 <button 
                   onClick={() => setIsSorted(!isSorted)}
-                  className="text-xs text-brand-600 bg-brand-50 px-2 py-1 rounded hover:bg-brand-100 transition-colors"
+                  className="text-xs text-brand-600 bg-brand-50 px-2 py-1 rounded hover:bg-brand-100 transition-colors print:hidden"
                 >
                    {isSorted ? '恢复默认排序' : '按预算排序'}
                 </button>
@@ -217,43 +333,65 @@ ${analysis.marketing4p}
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-center text-xs text-gray-400 mt-2">提示: 点击图表可切换排序</p>
            </div>
 
-           {/* Media List */}
-           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-             <h3 className="font-bold text-gray-800 mb-4">媒体明细</h3>
-             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+           {/* Media List - Editable */}
+           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 print:break-inside-avoid">
+             <div className="flex justify-between items-center mb-4">
+                 <h3 className="font-bold text-gray-800">媒体明细 (可编辑)</h3>
+                 <span className="text-xs text-gray-400 print:hidden">点击数值即可修改</span>
+             </div>
+             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar print:max-h-none print:overflow-visible">
                {plan.allocations.map((item, idx) => (
-                 <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-brand-200 transition-colors">
+                 <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-brand-200 transition-colors group">
                    <div className="flex gap-3">
                      {item.imageUrl && (
                        <a 
                          href={item.imageUrl} 
                          target="_blank" 
                          rel="noopener noreferrer" 
-                         className="shrink-0 group relative block"
-                         title="点击查看大图"
+                         className="shrink-0 group relative block print:hidden"
                        >
                          <img 
                            src={item.imageUrl} 
                            alt={item.name} 
-                           className="w-16 h-16 object-cover rounded-md border border-gray-200 shadow-sm group-hover:opacity-90 transition-opacity" 
+                           className="w-16 h-16 object-cover rounded-md border border-gray-200 shadow-sm" 
                          />
-                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-md">
-                           <ImageIcon size={16} className="text-white opacity-0 group-hover:opacity-100" />
-                         </div>
                        </a>
                      )}
                      <div className="flex-1 min-w-0">
-                       <div className="flex justify-between items-start mb-1">
-                         <span className="font-semibold text-brand-900 truncate pr-2">{item.name}</span>
-                         <span className="text-sm font-bold text-brand-600 whitespace-nowrap">{item.percentage}%</span>
+                       <div className="flex justify-between items-start mb-2 gap-2">
+                         <div className="font-semibold text-brand-900 truncate pr-2 flex-1">{item.name}</div>
+                         <div className="flex items-center gap-1 shrink-0 bg-white border border-gray-200 rounded px-1.5 py-0.5">
+                            <input
+                                type="number"
+                                value={item.percentage}
+                                onChange={(e) => handleAllocationChange(idx, 'percentage', e.target.value)}
+                                className="w-12 text-right text-sm font-bold text-brand-600 focus:outline-none focus:ring-0 border-none p-0 bg-transparent"
+                            />
+                            <span className="text-xs font-bold text-gray-400">%</span>
+                         </div>
                        </div>
-                       <div className="text-xs text-gray-500 mb-2">{item.type}</div>
-                       <div className="text-sm text-gray-600 bg-white p-2 rounded border border-gray-100 text-xs leading-relaxed">
-                         {item.reasoning}
+                       
+                       <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
+                          <span className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">{item.type}</span>
+                          <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-gray-200">
+                            <span>¥</span>
+                            <input
+                                type="number"
+                                value={item.budget}
+                                onChange={(e) => handleAllocationChange(idx, 'budget', e.target.value)}
+                                className="w-20 focus:outline-none focus:ring-0 border-none p-0 text-gray-600 bg-transparent"
+                            />
+                          </div>
                        </div>
+
+                       <textarea
+                         value={item.reasoning}
+                         onChange={(e) => handleAllocationChange(idx, 'reasoning', e.target.value)}
+                         className="w-full text-sm text-gray-600 bg-white p-2 rounded border border-gray-100 text-xs leading-relaxed resize-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500 transition-all"
+                         rows={3}
+                       />
                      </div>
                    </div>
                  </div>
@@ -264,55 +402,78 @@ ${analysis.marketing4p}
 
         {/* Right Column: Analysis Tabs */}
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px] flex flex-col">
-            <div className="flex border-b border-gray-200 overflow-x-auto">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px] flex flex-col print:min-h-0 print:shadow-none print:border-none">
+            <div className="flex border-b border-gray-200 overflow-x-auto print:hidden">
               <TabButton id="overview" label="品牌洞察" icon={Search} />
               <TabButton id="roi" label="ROI评估" icon={TrendingUp} />
               <TabButton id="swot" label="SWOT分析" icon={ShieldAlert} />
               <TabButton id="4p" label="4P营销" icon={Target} />
             </div>
 
-            <div className="p-6 flex-grow overflow-y-auto custom-markdown">
-              {activeTab === 'overview' && (
-                <div>
-                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-brand-700">
-                     <Search size={24}/> 市场与竞品洞察 (Real-time)
-                   </h2>
-                   <div className="prose prose-blue max-w-none">
-                     <ReactMarkdown>{plan.analysis.competitorInsight}</ReactMarkdown>
-                   </div>
-                </div>
-              )}
-              {activeTab === 'roi' && (
-                <div>
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-green-700">
-                    <TrendingUp size={24}/> 投资回报率 (ROI) 预估
-                  </h2>
-                  <div className="prose prose-green max-w-none">
+            <div className="p-6 flex-grow overflow-y-auto custom-markdown print:overflow-visible print:h-auto">
+              {/* Print View: Show all sections */}
+              <div className="hidden print:block space-y-8">
+                 <section>
+                    <h2 className="text-xl font-bold mb-4">1. 市场与竞品洞察</h2>
+                    <ReactMarkdown>{plan.analysis.competitorInsight}</ReactMarkdown>
+                 </section>
+                 <section>
+                    <h2 className="text-xl font-bold mb-4">2. 投资回报率 (ROI) 预估</h2>
                     <ReactMarkdown>{plan.analysis.roi}</ReactMarkdown>
-                  </div>
-                </div>
-              )}
-              {activeTab === 'swot' && (
-                <div>
-                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-purple-700">
-                    <ShieldAlert size={24}/> 深度 SWOT 分析
-                  </h2>
-                  <div className="prose prose-purple max-w-none">
+                 </section>
+                 <section>
+                    <h2 className="text-xl font-bold mb-4">3. SWOT 分析</h2>
                     <ReactMarkdown>{plan.analysis.swot}</ReactMarkdown>
-                  </div>
-                </div>
-              )}
-              {activeTab === '4p' && (
-                <div>
-                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-orange-700">
-                    <Target size={24}/> 4P 营销策略建议
-                  </h2>
-                  <div className="prose prose-orange max-w-none">
+                 </section>
+                 <section>
+                    <h2 className="text-xl font-bold mb-4">4. 4P 营销策略建议</h2>
                     <ReactMarkdown>{plan.analysis.marketing4p}</ReactMarkdown>
-                  </div>
-                </div>
-              )}
+                 </section>
+              </div>
+
+              {/* Web View: Show active tab */}
+              <div className="print:hidden">
+                  {activeTab === 'overview' && (
+                    <div>
+                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-brand-700">
+                         <Search size={24}/> 市场与竞品洞察 (Real-time)
+                       </h2>
+                       <div className="prose prose-blue max-w-none">
+                         <ReactMarkdown>{plan.analysis.competitorInsight}</ReactMarkdown>
+                       </div>
+                    </div>
+                  )}
+                  {activeTab === 'roi' && (
+                    <div>
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-green-700">
+                        <TrendingUp size={24}/> 投资回报率 (ROI) 预估
+                      </h2>
+                      <div className="prose prose-green max-w-none">
+                        <ReactMarkdown>{plan.analysis.roi}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'swot' && (
+                    <div>
+                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-purple-700">
+                        <ShieldAlert size={24}/> 深度 SWOT 分析
+                      </h2>
+                      <div className="prose prose-purple max-w-none">
+                        <ReactMarkdown>{plan.analysis.swot}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === '4p' && (
+                    <div>
+                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-orange-700">
+                        <Target size={24}/> 4P 营销策略建议
+                      </h2>
+                      <div className="prose prose-orange max-w-none">
+                        <ReactMarkdown>{plan.analysis.marketing4p}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+              </div>
             </div>
           </div>
         </div>
@@ -321,7 +482,7 @@ ${analysis.marketing4p}
       {/* Floating Chat Button */}
       <button 
         onClick={onOpenChat}
-        className="fixed bottom-8 right-8 bg-brand-600 text-white p-4 rounded-full shadow-2xl hover:bg-brand-700 transition-transform transform hover:scale-110 z-50 flex items-center gap-2"
+        className="fixed bottom-8 right-8 bg-brand-600 text-white p-4 rounded-full shadow-2xl hover:bg-brand-700 transition-transform transform hover:scale-110 z-50 flex items-center gap-2 print:hidden"
       >
         <MessageSquare size={24} />
         <span className="font-bold">咨询专家 Tom</span>
