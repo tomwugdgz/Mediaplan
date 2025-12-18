@@ -41,6 +41,7 @@ export interface AnalysisData {
   swot: string;
   marketing4p: string;
   competitorInsight: string; // From Search
+  creativeSuggestions?: string; // New field for ad creative ideas
 }
 
 export interface AdPlan {

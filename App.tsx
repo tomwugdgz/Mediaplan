@@ -7,8 +7,7 @@ import { PlanDashboard } from './components/PlanDashboard';
 import { ChatBot } from './components/ChatBot';
 import { PlanHistory } from './components/PlanHistory';
 import { PlanComparison } from './components/PlanComparison';
-import { Layout } from './components/Layout';
-import { History, LayoutDashboard } from 'lucide-react';
+import { History, LayoutDashboard, Share2 } from 'lucide-react';
 
 const App = () => {
   const [view, setView] = useState<'onboarding' | 'config' | 'dashboard' | 'history' | 'compare'>('onboarding');
@@ -16,13 +15,29 @@ const App = () => {
   const [plan, setPlan] = useState<AdPlan | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   
   // Storage & History State
   const [savedPlans, setSavedPlans] = useState<AdPlan[]>([]);
   const [comparePlans, setComparePlans] = useState<AdPlan[]>([]);
 
-  // Load from LocalStorage on mount
+  // Detect shared plan on mount
   useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#share=')) {
+      try {
+        const base64Data = hash.replace('#share=', '');
+        const decodedData = JSON.parse(atob(base64Data));
+        setPlan(decodedData);
+        setIsReadOnly(true);
+        setView('dashboard');
+        // Clear hash to prevent accidental re-parsing
+        window.history.replaceState(null, '', window.location.pathname);
+      } catch (e) {
+        console.error("Failed to parse shared plan", e);
+      }
+    }
+
     const stored = localStorage.getItem('ooh_saved_plans');
     if (stored) {
       try {
@@ -35,6 +50,7 @@ const App = () => {
 
   const handleProfileComplete = (data: UserProfile) => {
     setProfile(data);
+    setIsReadOnly(false);
     setView('config');
   };
 
@@ -63,6 +79,7 @@ const App = () => {
   const handleViewPlan = (p: AdPlan) => {
     setPlan(p);
     setProfile(p.userProfile);
+    setIsReadOnly(false);
     setView('dashboard');
   };
 
@@ -73,6 +90,7 @@ const App = () => {
 
   const handleResetPlan = () => {
     setPlan(null);
+    setIsReadOnly(false);
     setView('config');
   };
 
@@ -89,16 +107,13 @@ const App = () => {
   ) => {
     if (!profile) return;
     setIsProcessing(true);
+    setIsReadOnly(false);
     
     try {
-      // 1. Generate Allocations (Flash Model) with Selected Types
       const allocations = await generatePlanAllocations(profile, budget, regions, customMedia, selectedTypes);
-
-      // 2. Perform Analysis (Parallel with Search & Reasoning)
-      const analysis = await performAnalysis(profile, allocations, regions);
-
-      const newPlan: AdPlan = {
-        id: Date.now().toString(),
+      const newPlanId = Date.now().toString();
+      const initialPlan: AdPlan = {
+        id: newPlanId,
         name: `${profile.brandName || profile.products} 推广方案`,
         createdAt: Date.now(),
         userProfile: profile,
@@ -106,11 +121,21 @@ const App = () => {
         duration,
         regions,
         allocations,
-        analysis
+        analysis: {
+          roi: "分析生成中...",
+          swot: "分析生成中...",
+          marketing4p: "分析生成中...",
+          competitorInsight: "分析生成中...",
+          creativeSuggestions: "建议生成中..."
+        }
       };
 
-      setPlan(newPlan);
+      setPlan(initialPlan);
       setView('dashboard');
+
+      const analysis = await performAnalysis(profile, allocations, regions);
+      setPlan(prev => prev && prev.id === newPlanId ? { ...prev, analysis } : prev);
+      
     } catch (e) {
       console.error("Failed to generate plan", e);
       alert("AI 生成方案失败，请稍后重试");
@@ -121,38 +146,49 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 print:bg-white">
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 print:hidden">
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 print:hidden shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('onboarding')}>
-              <div className="bg-brand-600 text-white p-1.5 rounded-lg font-bold">OOH</div>
+              <div className="bg-brand-600 text-white p-1.5 rounded-lg font-bold shadow-sm">OOH</div>
               <span className="font-bold text-xl tracking-tight text-gray-900">小助手</span>
             </div>
-            {view !== 'onboarding' && (
-              <div className="flex items-center gap-4">
-                 <button 
-                    onClick={() => setView('history')} 
-                    className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'history' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
-                 >
-                    <History size={18} /> 历史方案
-                 </button>
-                 
-                 {plan && (
+            
+            <div className="flex items-center gap-4">
+               {!isReadOnly && (
+                 <>
                    <button 
-                      onClick={() => setView('dashboard')} 
-                      className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'dashboard' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
+                      onClick={() => setView('history')} 
+                      className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'history' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
                    >
-                      <LayoutDashboard size={18} /> 当前方案
+                      <History size={18} /> 历史库
                    </button>
-                 )}
+                   
+                   {plan && (
+                     <button 
+                        onClick={() => setView('dashboard')} 
+                        className={`flex items-center gap-1 text-sm font-medium transition-colors ${view === 'dashboard' ? 'text-brand-600' : 'text-gray-500 hover:text-brand-600'}`}
+                     >
+                        <LayoutDashboard size={18} /> 当前工作区
+                     </button>
+                   )}
 
-                 <div className="h-6 w-[1px] bg-gray-300 mx-2"></div>
+                   <div className="h-6 w-[1px] bg-gray-200 mx-2"></div>
 
-                 <button onClick={() => setView('config')} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-brand-700 transition-colors">
-                    + 新方案
+                   <button onClick={() => setView('config')} className="bg-brand-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-brand-700 transition-all shadow-sm active:scale-95">
+                      + 开启新项目
+                   </button>
+                 </>
+               )}
+               {isReadOnly && (
+                 <button 
+                   onClick={() => { setIsReadOnly(false); setView('onboarding'); setPlan(null); }}
+                   className="bg-brand-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-brand-700 transition-all shadow-sm active:scale-95"
+                 >
+                   创建我自己的方案
                  </button>
-              </div>
-            )}
+               )}
+            </div>
           </div>
         </div>
       </nav>
@@ -160,9 +196,9 @@ const App = () => {
       <main className="py-10 print:py-0">
         {view === 'onboarding' && (
           <div className="animate-fade-in-up print:hidden">
-             <div className="text-center mb-10">
+             <div className="text-center mb-10 px-4">
                <h1 className="text-3xl font-bold text-gray-900 mb-4">定制您的专属户外营销方案</h1>
-               <p className="text-gray-500 max-w-2xl mx-auto">回答5个核心问题，AI 将为您生成包含媒体组合、预算分配、竞品分析及 ROI 预测的完整策划书。</p>
+               <p className="text-gray-500 max-w-2xl mx-auto">回答核心问题，AI 将为您生成包含媒体组合、预算分配、竞品分析及 ROI 预测的完整策划书。</p>
              </div>
              <Questionnaire onComplete={handleProfileComplete} />
           </div>
@@ -172,7 +208,7 @@ const App = () => {
            <div className="animate-fade-in-up print:hidden">
               <div className="text-center mb-10">
                 <h1 className="text-2xl font-bold text-gray-900">配置投放参数</h1>
-                <p className="text-gray-500">根据已建立的客户档案，配置预算与媒体资源</p>
+                <p className="text-gray-500">基于您的品牌画像，我们将精准匹配最优媒体资源</p>
               </div>
               <PlanGenerator isGenerating={isProcessing} onGenerate={handleGeneratePlan} />
            </div>
@@ -185,6 +221,7 @@ const App = () => {
             onSavePlan={handleSavePlan}
             onReset={handleResetPlan}
             onUpdatePlan={handleUpdatePlan}
+            readOnly={isReadOnly}
           />
         )}
 
